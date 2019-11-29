@@ -13,7 +13,7 @@ type (
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	}
-	handler struct {
+	data struct {
 		tenants map[int]*Tenant
 	}
 )
@@ -27,10 +27,10 @@ var (
 //----------
 
 // GET return a tenant
-func (h *handler) getTenant(c echo.Context) error {
+func (d *data) getTenant(c echo.Context) error {
 	id, _ := strconv.Atoi(c.Param("id"))
 
-	tenant := h.tenants[id]
+	tenant := d.tenants[id]
 	if tenant == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "tenant not found")
 	}
@@ -38,20 +38,16 @@ func (h *handler) getTenant(c echo.Context) error {
 }
 
 // POST create a new tenant
-func (h *handler) createTenant(c echo.Context) error {
+func (d *data) createTenant(c echo.Context) error {
 	t := &Tenant{
 		ID: seq,
 	}
 	if err := c.Bind(t); err != nil {
 		return err
 	}
-	h.tenants[t.ID] = t
+	d.tenants[t.ID] = t
 	seq++
 	return c.JSON(http.StatusCreated, t)
-}
-
-func hello(c echo.Context) error {
-	return c.String(http.StatusOK, "Hello, World!")
 }
 
 func main() {
@@ -62,12 +58,11 @@ func main() {
 	e.Use(middleware.Recover())
 
 	// data handler
-	h := &handler{map[int]*Tenant{}}
+	d := &data{map[int]*Tenant{}}
 
 	// Routes
-	e.GET("/", hello)
-	e.GET("/tenant/:id", h.getTenant)
-	e.POST("/tenant", h.createTenant)
+	e.GET("/tenant/:id", d.getTenant)
+	e.POST("/tenant", d.createTenant)
 
 	e.Logger.Fatal(e.Start(":1323"))
 }
