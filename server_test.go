@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 var (
-	tenants         = map[int]*Tenant{}
+	machpTest       = "machp:machp123@tcp(localhost:3306)/machp_dev"
 	tenantJSONTom   = `{"id":1,"name":"tom"}`
 	tenantJSONJerry = `{"id":1,"name":"jerry"}`
 )
@@ -20,7 +21,7 @@ func dumpJSON(rec *httptest.ResponseRecorder) string {
 	return strings.TrimSuffix(rec.Body.String(), "\n")
 }
 
-// GET test get tenant
+// test tenant get, create, update and delete
 func TestTenant(t *testing.T) {
 	// Setup
 	e := echo.New()
@@ -29,10 +30,16 @@ func TestTenant(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	d := &data{tenants}
+
+	db, err := sql.Open("mysql", machpTest)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+	m := &Machp{db}
 
 	// createTenant tom
-	if assert.NoError(t, d.createTenant(c)) {
+	if assert.NoError(t, m.createTenant(c)) {
 		assert.Equal(t, http.StatusCreated, rec.Code)
 		assert.Equal(t, tenantJSONTom, dumpJSON(rec))
 	}
@@ -46,7 +53,7 @@ func TestTenant(t *testing.T) {
 	c.SetParamNames("id")
 	c.SetParamValues("1")
 
-	if assert.NoError(t, d.putTenant(c)) {
+	if assert.NoError(t, m.putTenant(c)) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, tenantJSONJerry, dumpJSON(rec))
 	}
@@ -59,7 +66,7 @@ func TestTenant(t *testing.T) {
 	c.SetParamNames("id")
 	c.SetParamValues("1")
 
-	if assert.NoError(t, d.getTenant(c)) {
+	if assert.NoError(t, m.getTenant(c)) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, tenantJSONJerry, dumpJSON(rec))
 	}
@@ -72,7 +79,7 @@ func TestTenant(t *testing.T) {
 	c.SetParamNames("id")
 	c.SetParamValues("1")
 
-	if assert.NoError(t, d.deleteTenant(c)) {
+	if assert.NoError(t, m.deleteTenant(c)) {
 		assert.Equal(t, http.StatusNoContent, rec.Code)
 	}
 

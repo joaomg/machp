@@ -1,20 +1,24 @@
 package main
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 )
 
 type (
+	// tenant type represents a tenant table row
 	Tenant struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	}
-	data struct {
-		tenants map[int]*Tenant
+	// machp type contains a pointer to its sql.DB
+	Machp struct {
+		db *sql.DB
 	}
 )
 
@@ -27,50 +31,79 @@ var (
 //----------
 
 // GET return a tenant
-func (d *data) getTenant(c echo.Context) error {
+func (machp *Machp) getTenant(c echo.Context) error {
 	id, _ := strconv.Atoi(c.Param("id"))
 
-	tenant := d.tenants[id]
-	if tenant == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "tenant not found")
+	t := &Tenant{}
+	err := machp.db.QueryRow("SELECT id, name FROM tenant where id = ?", id).Scan(&t.ID, &t.Name)
+	if err != nil {
+		c.Logger().Error(err)
+		return echo.NewHTTPError(http.StatusNotFound, "unable to query tenant")
 	}
-	return c.JSON(http.StatusOK, tenant)
+
+	return c.JSON(http.StatusOK, t)
 }
 
 // POST create a new tenant
-func (d *data) createTenant(c echo.Context) error {
-	t := &Tenant{
-		ID: seq,
-	}
+func (machp *Machp) createTenant(c echo.Context) error {
+
+	t := &Tenant{}
 	if err := c.Bind(t); err != nil {
-		return err
+		c.Logger().Error(err)
+		return echo.NewHTTPError(http.StatusNotFound, "unable to bind context to tenant")
 	}
-	d.tenants[t.ID] = t
-	seq++
+
+	stmt, err := machp.db.Prepare("INSERT INTO tenant (name) VALUES (?)")
+	if err != nil {
+		c.Logger().Error(err)
+		return echo.NewHTTPError(http.StatusNotFound, "error preparing statement")
+	}
+
+	res, err := stmt.Exec(t.Name)
+	if err != nil {
+		c.Logger().Error(err)
+		return echo.NewHTTPError(http.StatusNotFound, "error executing statement")
+	}
+
+	id, err := res.LastInsertId()
+	err = machp.db.QueryRow("SELECT id, name FROM tenant where id = ?", id).Scan(&t.ID, &t.Name)
+	if err != nil {
+		c.Logger().Error(err)
+		return echo.NewHTTPError(http.StatusNotFound, "unable to query tenant")
+	}
+
 	return c.JSON(http.StatusCreated, t)
 }
 
 // DELETE a tenant
-func (d *data) deleteTenant(c echo.Context) error {
+func (machp *Machp) deleteTenant(c echo.Context) error {
 	id, _ := strconv.Atoi(c.Param("id"))
 
-	tenant := d.tenants[id]
-	if tenant == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "tenant not found")
+	rows, err := machp.db.Query("DELETE FROM tenant WHERE id = ?", id)
+	if err != nil {
+		c.Logger().Error(err)
+		return echo.NewHTTPError(http.StatusNotFound, "error deleting tenant")
 	}
-	delete(d.tenants, id)
+	defer rows.Close()
+
 	return c.NoContent(http.StatusNoContent)
 }
 
 // PUT update tenant details
-func (d *data) putTenant(c echo.Context) error {
+func (machp *Machp) putTenant(c echo.Context) error {
 	t := new(Tenant)
 	if err := c.Bind(t); err != nil {
 		return err
 	}
-	id, _ := strconv.Atoi(c.Param("id"))
-	d.tenants[id] = t
-	return c.JSON(http.StatusOK, d.tenants[id])
+
+	rows, err := machp.db.Query("UPDATE tenant SET name = ? WHERE id = ?", t.Name, t.ID)
+	if err != nil {
+		c.Logger().Error(err)
+		return echo.NewHTTPError(http.StatusNotFound, "error updating tenant")
+	}
+	defer rows.Close()
+
+	return c.JSON(http.StatusOK, t)
 }
 
 func main() {
@@ -80,14 +113,20 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// data handler
-	d := &data{map[int]*Tenant{}}
+	// Machp
+	db, err := sql.Open("mysql", "machp:machp123@tcp(localhost:3306)/machp_dev")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+
+	machp := &Machp{db}
 
 	// Routes
-	e.GET("/tenant/:id", d.getTenant)
-	e.POST("/tenant", d.createTenant)
-	e.DELETE("/tenant/:id", d.deleteTenant)
-	e.PUT("/tenant/:id", d.putTenant)
+	e.GET("/tenant/:id", machp.getTenant)
+	e.POST("/tenant", machp.createTenant)
+	e.DELETE("/tenant/:id", machp.deleteTenant)
+	e.PUT("/tenant/:id", machp.putTenant)
 
 	e.Logger.Fatal(e.Start(":1323"))
 }
