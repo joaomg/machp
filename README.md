@@ -9,6 +9,9 @@ go tidy up
 ## run all tests
 go test
 
+## calculate test coverage
+go test --coverprofile=cover.out
+
 ## launch server
 go run .\server.go
 
@@ -17,3 +20,10 @@ curl -X POST -H "Content-Type: application/json" -d "{\"name\":\"tom\"}" localho
 
 ## get tenant 1
 curl localhost:1323/tenant/1
+
+## update tenant 1, change name from tom to jerry
+curl -X PUT -H "Content-Type: application/json" -d "{\"id\":1, \"name\":\"jerry\"}" localhost:1323/tenant/1
+
+## delete tenant 1
+curl -X DELETE localhost:1323/tenant/1
+

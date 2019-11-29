@@ -50,6 +50,29 @@ func (d *data) createTenant(c echo.Context) error {
 	return c.JSON(http.StatusCreated, t)
 }
 
+// DELETE a tenant
+func (d *data) deleteTenant(c echo.Context) error {
+	id, _ := strconv.Atoi(c.Param("id"))
+
+	tenant := d.tenants[id]
+	if tenant == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "tenant not found")
+	}
+	delete(d.tenants, id)
+	return c.NoContent(http.StatusNoContent)
+}
+
+// PUT update tenant details
+func (d *data) putTenant(c echo.Context) error {
+	t := new(Tenant)
+	if err := c.Bind(t); err != nil {
+		return err
+	}
+	id, _ := strconv.Atoi(c.Param("id"))
+	d.tenants[id] = t
+	return c.JSON(http.StatusOK, d.tenants[id])
+}
+
 func main() {
 	e := echo.New()
 
@@ -63,6 +86,8 @@ func main() {
 	// Routes
 	e.GET("/tenant/:id", d.getTenant)
 	e.POST("/tenant", d.createTenant)
+	e.DELETE("/tenant/:id", d.deleteTenant)
+	e.PUT("/tenant/:id", d.putTenant)
 
 	e.Logger.Fatal(e.Start(":1323"))
 }
