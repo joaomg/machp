@@ -53,10 +53,10 @@ func TestTenant(t *testing.T) {
 		panic(err.Error())
 	}
 	defer db.Close()
-	m := &Handler{db}
+	h := &Handler{db}
 
 	// createTenant tom
-	if assert.NoError(t, m.createTenant(c)) {
+	if assert.NoError(t, h.createTenant(c)) {
 		assert.Equal(t, http.StatusCreated, rec.Code)
 		assert.Equal(t, tenantJSONTom, dumpJSON(rec))
 	}
@@ -70,7 +70,7 @@ func TestTenant(t *testing.T) {
 	c.SetParamNames("id")
 	c.SetParamValues("1")
 
-	if assert.NoError(t, m.putTenant(c)) {
+	if assert.NoError(t, h.putTenant(c)) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, tenantJSONJerry, dumpJSON(rec))
 	}
@@ -83,7 +83,7 @@ func TestTenant(t *testing.T) {
 	c.SetParamNames("id")
 	c.SetParamValues("1")
 
-	if assert.NoError(t, m.getTenant(c)) {
+	if assert.NoError(t, h.getTenant(c)) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, tenantJSONJerry, dumpJSON(rec))
 	}
@@ -96,7 +96,7 @@ func TestTenant(t *testing.T) {
 	c.SetParamNames("id")
 	c.SetParamValues("1")
 
-	if assert.NoError(t, m.deleteTenant(c)) {
+	if assert.NoError(t, h.deleteTenant(c)) {
 		assert.Equal(t, http.StatusNoContent, rec.Code)
 	}
 

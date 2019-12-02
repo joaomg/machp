@@ -21,14 +21,17 @@ go test --coverprofile=cover.out
 ## launch server
 go run .\server.go
 
-## create tenant 1
+## create tenant 2
 curl -X POST -H "Content-Type: application/json" -d "{\"name\":\"tom\"}" localhost:1323/tenant
 
-## get tenant 1
-curl localhost:1323/tenant/1
+## get tenant 2
+curl localhost:1323/tenant/2
 
-## update tenant 1, change name from tom to jerry
-curl -X PUT -H "Content-Type: application/json" -d "{\"id\":1, \"name\":\"jerry\"}" localhost:1323/tenant/1
+## update tenant 2, change name from tom to jerry
+curl -X PUT -H "Content-Type: application/json" -d "{\"id\":2, \"name\":\"jerry\"}" localhost:1323/tenant/2
+
+## upload files to tenant jerry
+curl -X POST -F files=@c:\tmp\1.txt -F files=@c:\tmp\2.txt localhost:1323/tenant/jerry/upload
 
 ## delete tenant 1
 curl -X DELETE localhost:1323/tenant/1
