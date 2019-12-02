@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -19,6 +22,20 @@ var (
 
 func dumpJSON(rec *httptest.ResponseRecorder) string {
 	return strings.TrimSuffix(rec.Body.String(), "\n")
+}
+
+// test drop and create schema
+// creates an empty schema suitable for testing
+func TestSchema(t *testing.T) {
+	cmd := exec.Command("cmd", "/c", "mysql", "-v", "-hlocalhost", "-P3306", "-umachp", "-pmachp123", "machp_dev", "<", "1_machp_schema.sql")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	assert.Nil(t, err)
 }
 
 // test tenant get, create, update and delete
