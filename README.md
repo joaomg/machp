@@ -6,6 +6,12 @@ cd c:\celfinet\machp
 ## download, add and remove unused dependencies
 go tidy up
 
+## create machp user
+mysql -hlocalhost -P3306 -uroot -ppandora -e"source 0_machp_user.sql;"
+
+## use machp user to drop/create the machp schema
+mysql -hlocalhost -P3306 -umachp -pmachp123 machp_dev -e"source 1_machp_schema.sql;"
+
 ## run all tests
 go test
 
