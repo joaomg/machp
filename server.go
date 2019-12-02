@@ -16,8 +16,8 @@ type (
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	}
-	// machp type contains a pointer to its sql.DB
-	Machp struct {
+	// handler type contains a pointer to its sql.DB
+	Handler struct {
 		db *sql.DB
 	}
 )
@@ -31,7 +31,7 @@ var (
 //----------
 
 // GET return a tenant
-func (machp *Machp) getTenant(c echo.Context) error {
+func (machp *Handler) getTenant(c echo.Context) error {
 	id, _ := strconv.Atoi(c.Param("id"))
 
 	t := &Tenant{}
@@ -45,7 +45,7 @@ func (machp *Machp) getTenant(c echo.Context) error {
 }
 
 // POST create a new tenant
-func (machp *Machp) createTenant(c echo.Context) error {
+func (machp *Handler) createTenant(c echo.Context) error {
 
 	t := &Tenant{}
 	if err := c.Bind(t); err != nil {
@@ -76,7 +76,7 @@ func (machp *Machp) createTenant(c echo.Context) error {
 }
 
 // DELETE a tenant
-func (machp *Machp) deleteTenant(c echo.Context) error {
+func (machp *Handler) deleteTenant(c echo.Context) error {
 	id, _ := strconv.Atoi(c.Param("id"))
 
 	rows, err := machp.db.Query("DELETE FROM tenant WHERE id = ?", id)
@@ -90,7 +90,7 @@ func (machp *Machp) deleteTenant(c echo.Context) error {
 }
 
 // PUT update tenant details
-func (machp *Machp) putTenant(c echo.Context) error {
+func (machp *Handler) putTenant(c echo.Context) error {
 	t := new(Tenant)
 	if err := c.Bind(t); err != nil {
 		return err
@@ -115,14 +115,14 @@ func main() {
 	}))
 	e.Use(middleware.Recover())
 
-	// Machp
+	// Handler
 	db, err := sql.Open("mysql", "machp:machp123@tcp(localhost:3306)/machp_dev")
 	if err != nil {
 		panic(err.Error())
 	}
 	defer db.Close()
 
-	machp := &Machp{db}
+	machp := &Handler{db}
 
 	// Routes
 	e.GET("/tenant/:id", machp.getTenant)

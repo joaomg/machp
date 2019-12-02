@@ -36,7 +36,7 @@ func TestTenant(t *testing.T) {
 		panic(err.Error())
 	}
 	defer db.Close()
-	m := &Machp{db}
+	m := &Handler{db}
 
 	// createTenant tom
 	if assert.NoError(t, m.createTenant(c)) {
