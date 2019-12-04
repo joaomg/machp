@@ -44,3 +44,8 @@ docker run -d -p 8080:1323 --name machp-dev machp
 
 ## check the echo server is listening on port 8080
 curl -X GET localhost:8080/tenant/1
+
+# change HTTP port to 1326 in MACHP_PORT env variable
+# and lauch the server
+$env:MACHP_PORT=1326
+go run .\server.go

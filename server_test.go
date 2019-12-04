@@ -16,8 +16,8 @@ import (
 
 var (
 	machpTest       = "machp:machp123@tcp(localhost:3306)/machp_dev"
-	tenantJSONTom   = `{"id":1,"name":"tom"}`
-	tenantJSONJerry = `{"id":1,"name":"jerry"}`
+	tenantJSONTom   = `{"id":1,"name":"tom","md5":""}`
+	tenantJSONJerry = `{"id":1,"name":"jerry","md5":""}`
 )
 
 func dumpJSON(rec *httptest.ResponseRecorder) string {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,9 +10,26 @@ import (
 	"strconv"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 )
+
+// Config is a application configuration structure
+type Config struct {
+	Database struct {
+		Host        string `env:"MACHP_DB_HOST" env-description:"Database host" env-default:"localhost"`
+		Port        string `env:"MACHP_DB_PORT" env-description:"Database port" env-default:"3306"`
+		Username    string `env:"MACHP_DB_USER" env-description:"Database user name" env-default:"machp"`
+		Password    string `env:"MACHP_DB_PASSWORD" env-description:"Database user password" env-default:"machp123"`
+		Name        string `env:"MACHP_DB_NAME" env-description:"Database name" env-default:"machp_dev"`
+		Connections int    `env:"MACHP_DB_CONNECTIONS" env-description:"Total number of database connections" env-default:"8"`
+	} `yaml:"database"`
+	Server struct {
+		Host string `env:"MACHP_HOST" env-description:"Server host" env-default:"localhost"`
+		Port string `env:"MACHP_PORT" env-description:"Server port" env-default:"1325"`
+	} `yaml:"server"`
+}
 
 type (
 	// tenant type represents a tenant table row
@@ -185,6 +203,18 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 }
 
 func main() {
+	// Config
+	var cfg Config
+
+	// read configuration from environment variables
+	if err := cleanenv.ReadEnv(&cfg); err != nil {
+		fmt.Println(err)
+		os.Exit(2)
+	}
+	cfgJSON, _ := json.Marshal(cfg)
+	fmt.Println(string(cfgJSON))
+
+	// Echo
 	e := echo.New()
 
 	// Middleware
@@ -194,12 +224,11 @@ func main() {
 	e.Use(middleware.Recover())
 
 	// Handler
-	db, err := sql.Open("mysql", "machp:machp123@tcp(localhost:3306)/machp_dev")
+	db, err := sql.Open("mysql", cfg.Database.Username+":"+cfg.Database.Password+"@tcp("+cfg.Database.Host+":"+cfg.Database.Port+")/"+cfg.Database.Name)
 	if err != nil {
 		panic(err.Error())
 	}
 	defer db.Close()
-
 	machp := &Handler{db}
 
 	// Routes
@@ -209,5 +238,5 @@ func main() {
 	e.PUT("/tenant/:id", machp.putTenant)
 	e.POST("/tenant/:name/upload", machp.uploadToTenant)
 
-	e.Logger.Fatal(e.Start(":1323"))
+	e.Logger.Fatal(e.Start(cfg.Server.Host + ":" + cfg.Server.Port))
 }
