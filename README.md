@@ -36,3 +36,11 @@ curl -X POST -F files=@c:\tmp\1.txt -F files=@c:\tmp\2.txt localhost:1323/tenant
 ## delete tenant 1
 curl -X DELETE localhost:1323/tenant/1
 
+## build docker image
+docker build -f Dockerfile . -t machp
+
+## run docker image
+docker run -d -p 8080:1323 --name machp-dev machp
+
+## check the echo server is listening on port 8080
+curl -X GET localhost:8080/tenant/1
