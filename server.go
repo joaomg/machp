@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -52,6 +51,14 @@ var (
 // Handlers
 //----------
 
+func getRequestID(c echo.Context) (string, error) {
+	rid := c.Request().Header.Get(echo.HeaderXRequestID)
+	if rid == "" {
+		rid = c.Response().Header().Get(echo.HeaderXRequestID)
+	}
+	return rid, nil
+}
+
 func (h *Handler) getTenantByID(id int) (Tenant, error) {
 	t := &Tenant{}
 	err := h.db.QueryRow("SELECT id, name FROM tenant where id = ?", id).Scan(&t.ID, &t.Name)
@@ -74,6 +81,9 @@ func (h *Handler) getTenant(c echo.Context) error {
 		c.Logger().Error(err)
 		return echo.NewHTTPError(http.StatusNotFound, "unable to get tenant details")
 	}
+
+	rid, _ := getRequestID(c)
+	fmt.Println(rid)
 
 	return c.JSON(http.StatusOK, t)
 }
@@ -205,21 +215,18 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 func main() {
 	// Config
 	var cfg Config
-
-	// read configuration from environment variables
 	if err := cleanenv.ReadEnv(&cfg); err != nil {
 		fmt.Println(err)
 		os.Exit(2)
 	}
-	cfgJSON, _ := json.Marshal(cfg)
-	fmt.Println(string(cfgJSON))
 
 	// Echo
 	e := echo.New()
 
 	// Middleware
+	e.Use(middleware.RequestID())
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: "method=${method}, uri=${uri}, status=${status}\n",
+		Format: "method=${method}, uri=${uri}, status=${status}, requestid=${id}\n",
 	}))
 	e.Use(middleware.Recover())
 
@@ -238,5 +245,6 @@ func main() {
 	e.PUT("/tenant/:id", machp.putTenant)
 	e.POST("/tenant/:name/upload", machp.uploadToTenant)
 
+	// Start Echo
 	e.Logger.Fatal(e.Start(cfg.Server.Host + ":" + cfg.Server.Port))
 }
