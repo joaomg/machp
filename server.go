@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/md5"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,25 +28,24 @@ type Config struct {
 	} `yaml:"database"`
 	Server struct {
 		Host string `env:"MACHP_HOST" env-description:"Server host" env-default:"localhost"`
-		Port string `env:"MACHP_PORT" env-description:"Server port" env-default:"1325"`
+		Port string `env:"MACHP_PORT" env-description:"Server port" env-default:"1323"`
+		Home string `env:"MACHP_HOME" env-description:"Server home directory" env-default:"files"`
 	} `yaml:"server"`
 }
 
+// Handler, Tenant types
 type (
+	// handler type contains a pointer to its sql.DB
+	Handler struct {
+		db  *sql.DB
+		cfg *Config
+	}
 	// tenant type represents a tenant table row
 	Tenant struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 		Md5  string `json:"md5"`
 	}
-	// handler type contains a pointer to its sql.DB
-	Handler struct {
-		db *sql.DB
-	}
-)
-
-var (
-	seq = 1
 )
 
 //----------
@@ -61,13 +62,13 @@ func getRequestID(c echo.Context) (string, error) {
 
 func (h *Handler) getTenantByID(id int) (Tenant, error) {
 	t := &Tenant{}
-	err := h.db.QueryRow("SELECT id, name FROM tenant where id = ?", id).Scan(&t.ID, &t.Name)
+	err := h.db.QueryRow("SELECT id, name, md5 FROM tenant where id = ?", id).Scan(&t.ID, &t.Name, &t.Md5)
 	return *t, err
 }
 
 func (h *Handler) getTenantByName(name string) (Tenant, error) {
 	t := &Tenant{}
-	err := h.db.QueryRow("SELECT id, name FROM tenant where name = ?", name).Scan(&t.ID, &t.Name)
+	err := h.db.QueryRow("SELECT id, name, md5 FROM tenant where name = ?", name).Scan(&t.ID, &t.Name, &t.Md5)
 	return *t, err
 }
 
@@ -97,13 +98,16 @@ func (h *Handler) createTenant(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "unable to bind context to tenant")
 	}
 
-	stmt, err := h.db.Prepare("INSERT INTO tenant (name) VALUES (?)")
+	hash := md5.Sum([]byte(t.Name))
+	t.Md5 = hex.EncodeToString(hash[:])
+
+	stmt, err := h.db.Prepare("INSERT INTO tenant (name, md5) VALUES (?, ?)")
 	if err != nil {
 		c.Logger().Error(err)
 		return echo.NewHTTPError(http.StatusNotFound, "error preparing statement")
 	}
 
-	res, err := stmt.Exec(t.Name)
+	res, err := stmt.Exec(t.Name, t.Md5)
 	if err != nil {
 		c.Logger().Error(err)
 		return echo.NewHTTPError(http.StatusNotFound, "error executing statement")
@@ -152,10 +156,13 @@ func (h *Handler) putTenant(c echo.Context) error {
 	// check if the tenant was changed
 	count, _ := res.RowsAffected()
 	if count == 0 {
-		return echo.NewHTTPError(http.StatusNotFound, "unable to update tenant")
+		return echo.NewHTTPError(http.StatusOK, "no change to tenant")
 	}
 
-	return c.JSON(http.StatusOK, t)
+	// get tenant from db
+	changedTenant, _ := h.getTenantByID(t.ID)
+
+	return c.JSON(http.StatusOK, changedTenant)
 }
 
 // UPLOAD file to tenant
@@ -164,7 +171,6 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 	name := c.Param("name")
 
 	t, err := h.getTenantByName(name)
-	c.Logger().Info(t)
 	if err != nil {
 		c.Logger().Error(err)
 		return echo.NewHTTPError(http.StatusNotFound, "unable to get tenant details")
@@ -181,6 +187,12 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 	}
 	files := form.File["files"]
 
+	// create tenant directory using it's first four md5 chars
+	// inside the machp server home directory
+	machpHome := h.cfg.Server.Home
+	tenantDirectory := fmt.Sprintf("%s%c%s", machpHome, os.PathSeparator, t.Md5[:4])
+	os.Mkdir(tenantDirectory, 0755)
+
 	for _, file := range files {
 		// Source
 		src, err := file.Open()
@@ -191,11 +203,8 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 
 		// Destination
 
-		// tenant directory home using it's name
-		os.Mkdir(t.Name, 0755)
-
 		// create files inside the
-		fileName := fmt.Sprintf("%s%c%s", t.Name, os.PathSeparator, file.Filename)
+		fileName := fmt.Sprintf("%s%c%s", tenantDirectory, os.PathSeparator, file.Filename)
 		dst, err := os.Create(fileName)
 		if err != nil {
 			return err
@@ -206,7 +215,6 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 		if _, err = io.Copy(dst, src); err != nil {
 			return err
 		}
-
 	}
 
 	return c.JSON(http.StatusOK, files)
@@ -219,6 +227,10 @@ func main() {
 		fmt.Println(err)
 		os.Exit(2)
 	}
+
+	// Init
+	machpHome := cfg.Server.Home
+	os.Mkdir(machpHome, 0755)
 
 	// Echo
 	e := echo.New()
@@ -236,7 +248,7 @@ func main() {
 		panic(err.Error())
 	}
 	defer db.Close()
-	machp := &Handler{db}
+	machp := &Handler{db, &cfg}
 
 	// Routes
 	e.GET("/tenant/:id", machp.getTenant)
