@@ -54,7 +54,7 @@ func TestTenant(t *testing.T) {
 		panic(err.Error())
 	}
 	defer db.Close()
-	h := &Handler{db, &cfg}
+	h := &Handler{db, &cfg, nil, nil}
 
 	// createTenant tom
 	if assert.NoError(t, h.createTenant(c)) {

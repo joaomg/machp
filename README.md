@@ -49,3 +49,9 @@ curl -X GET localhost:8080/tenant/1
 # and lauch the server
 $env:MACHP_PORT=1326
 go run .\server.go
+
+## pull rabbitmq image
+docker pull rabbitmq
+
+## create and start rabbitmq container
+docker run -d --hostname my-rabbit --name my-rabbitmq -p "5672:5672" rabbitmq

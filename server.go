@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	"github.com/streadway/amqp"
 )
 
 // Config is a application configuration structure
@@ -21,11 +23,18 @@ type Config struct {
 	Database struct {
 		Host        string `env:"MACHP_DB_HOST" env-description:"Database host" env-default:"localhost"`
 		Port        string `env:"MACHP_DB_PORT" env-description:"Database port" env-default:"3306"`
-		Username    string `env:"MACHP_DB_USER" env-description:"Database user name" env-default:"machp"`
+		User        string `env:"MACHP_DB_USER" env-description:"Database user name" env-default:"machp"`
 		Password    string `env:"MACHP_DB_PASSWORD" env-description:"Database user password" env-default:"machp123"`
 		Name        string `env:"MACHP_DB_NAME" env-description:"Database name" env-default:"machp_dev"`
 		Connections int    `env:"MACHP_DB_CONNECTIONS" env-description:"Total number of database connections" env-default:"8"`
 	} `yaml:"database"`
+	Queue struct {
+		Scheme   string `env:"MACHP_MQ_SCHENE" env-description:"Message queue scheme: amqp or amqps" env-default:"amqp"`
+		User     string `env:"MACHP_MQ_USER" env-description:"Message queue user name" env-default:"guest"`
+		Password string `env:"MACHP_MQ_PASSWORD" env-description:"Message queue password" env-default:"guest"`
+		Host     string `env:"MACHP_MQ_HOST" env-description:"Message queue host" env-default:"localhost"`
+		Port     string `env:"MACHP_MQ_PORT" env-description:"Message queue port" env-default:"5672"`
+	} `yaml:"queue"`
 	Server struct {
 		Host string `env:"MACHP_HOST" env-description:"Server host" env-default:"localhost"`
 		Port string `env:"MACHP_PORT" env-description:"Server port" env-default:"1323"`
@@ -37,8 +46,10 @@ type Config struct {
 type (
 	// handler type contains a pointer to its sql.DB
 	Handler struct {
-		db  *sql.DB
-		cfg *Config
+		db              *sql.DB
+		cfg             *Config
+		producerChannel *amqp.Channel
+		consumerChannel *amqp.Channel
 	}
 	// tenant type represents a tenant table row
 	Tenant struct {
@@ -48,9 +59,11 @@ type (
 	}
 )
 
-//----------
-// Handlers
-//----------
+func failOnError(err error, msg string) {
+	if err != nil {
+		log.Fatalf("%s: %s", msg, err)
+	}
+}
 
 func getRequestID(c echo.Context) (string, error) {
 	rid := c.Request().Header.Get(echo.HeaderXRequestID)
@@ -224,13 +237,33 @@ func main() {
 	// Config
 	var cfg Config
 	if err := cleanenv.ReadEnv(&cfg); err != nil {
-		fmt.Println(err)
-		os.Exit(2)
+		log.Print("Failed to read configuration from environment")
+		panic(err.Error())
 	}
 
 	// Init
+
+	// file system
 	machpHome := cfg.Server.Home
 	os.Mkdir(machpHome, 0755)
+
+	// database
+	db, err := sql.Open("mysql", cfg.Database.User+":"+cfg.Database.Password+"@tcp("+cfg.Database.Host+":"+cfg.Database.Port+")/"+cfg.Database.Name)
+	failOnError(err, "Failed to connect to myql database")
+	defer db.Close()
+
+	// message queue
+	conn, err := amqp.Dial(cfg.Queue.Scheme + "://" + cfg.Queue.User + "@" + cfg.Queue.Host + ":" + cfg.Queue.Port + "/")
+	failOnError(err, "Failed to connect to RabbitMQ")
+	defer conn.Close()
+
+	pch, err := conn.Channel()
+	failOnError(err, "Failed to open a RabbitMQ channel")
+	defer pch.Close()
+
+	cch, err := conn.Channel()
+	failOnError(err, "Failed to open a RabbitMQ channel")
+	defer cch.Close()
 
 	// Echo
 	e := echo.New()
@@ -243,12 +276,7 @@ func main() {
 	e.Use(middleware.Recover())
 
 	// Handler
-	db, err := sql.Open("mysql", cfg.Database.Username+":"+cfg.Database.Password+"@tcp("+cfg.Database.Host+":"+cfg.Database.Port+")/"+cfg.Database.Name)
-	if err != nil {
-		panic(err.Error())
-	}
-	defer db.Close()
-	machp := &Handler{db, &cfg}
+	machp := &Handler{db, &cfg, pch, cch}
 
 	// Routes
 	e.GET("/tenant/:id", machp.getTenant)
