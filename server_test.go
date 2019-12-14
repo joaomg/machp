@@ -3,13 +3,18 @@ package main
 import (
 	"bytes"
 	"database/sql"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo"
 	"github.com/stretchr/testify/assert"
 )
@@ -38,6 +43,18 @@ func TestSchema(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+// remove and create local file system
+// remove the files directory
+// create the files directory
+func TestFileSystem(t *testing.T) {
+
+	// delete files directory
+	assert.Nil(t, os.RemoveAll("files"))
+
+	// create files directory
+	assert.Nil(t, os.Mkdir("files", 0755))
+}
+
 // test tenant get, create, update and delete
 func TestTenant(t *testing.T) {
 	// Setup
@@ -49,6 +66,11 @@ func TestTenant(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	var cfg Config
+	if err := cleanenv.ReadEnv(&cfg); err != nil {
+		log.Print("Failed to read configuration from environment")
+		panic(err.Error())
+	}
+
 	db, err := sql.Open("mysql", machpTest)
 	if err != nil {
 		panic(err.Error())
@@ -88,6 +110,35 @@ func TestTenant(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, tenantJSONJerry, dumpJSON(rec))
 	}
+
+	// uploadToTenant
+	path := "abc.txt"
+	file, err := os.Open(path)
+	assert.Nil(t, err)
+	defer file.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("files", filepath.Base(path))
+	assert.Nil(t, err)
+	_, err = io.Copy(part, file)
+	writer.Close()
+
+	req = httptest.NewRequest(http.MethodPost, "/tenant/:name/upload", body)
+	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
+	rec = httptest.NewRecorder()
+	c = e.NewContext(req, rec)
+	c.SetPath("/tenant/:name/upload")
+	c.SetParamNames("name")
+	c.SetParamValues("jerry")
+
+	if assert.NoError(t, h.uploadToTenant(c)) {
+		assert.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	_, err = os.Stat("files/34b7/abc.txt")
+	assert.NoError(t, err)
+	assert.True(t, !os.IsNotExist(err))
 
 	// deleteTenant delete the tenant with id 1
 	req = httptest.NewRequest(http.MethodDelete, "/", nil)

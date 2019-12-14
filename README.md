@@ -18,6 +18,9 @@ go test
 ### calculate test coverage
 go test --coverprofile=cover.out
 
+### and see in it html
+go tool cover --html=cover.out 
+
 ### launch server
 go run .\server.go
 
@@ -54,3 +57,6 @@ docker pull rabbitmq
 
 ### create and start rabbitmq container
 docker run -d --hostname my-rabbit --name my-rabbitmq -p "5672:5672" rabbitmq
+
+### if already created start by
+docker start my-rabbitmq
