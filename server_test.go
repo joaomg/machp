@@ -20,7 +20,8 @@ import (
 )
 
 var (
-	machpTest       = "machp:machp123@tcp(localhost:3306)/machp_dev"
+	driver          = "mysql"
+	dataSource      = "machp:machp123@tcp(localhost:3306)/machp_dev"
 	tenantJSONTom   = `{"id":1,"name":"tom","md5":"34b7da764b21d298ef307d04d8152dc5"}`
 	tenantJSONJerry = `{"id":1,"name":"jerry","md5":"34b7da764b21d298ef307d04d8152dc5"}`
 )
@@ -57,6 +58,21 @@ func TestFileSystem(t *testing.T) {
 
 // test tenant get, create, update and delete
 func TestTenant(t *testing.T) {
+
+	// Handler
+	var cfg Config
+	if err := cleanenv.ReadEnv(&cfg); err != nil {
+		log.Print("Failed to read configuration from environment")
+		panic(err.Error())
+	}
+
+	db, err := sql.Open(driver, dataSource)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+	h := &Handler{db, &cfg, nil, nil}
+
 	// Setup
 	e := echo.New()
 
@@ -64,19 +80,6 @@ func TestTenant(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-
-	var cfg Config
-	if err := cleanenv.ReadEnv(&cfg); err != nil {
-		log.Print("Failed to read configuration from environment")
-		panic(err.Error())
-	}
-
-	db, err := sql.Open("mysql", machpTest)
-	if err != nil {
-		panic(err.Error())
-	}
-	defer db.Close()
-	h := &Handler{db, &cfg, nil, nil}
 
 	// createTenant tom
 	if assert.NoError(t, h.createTenant(c)) {

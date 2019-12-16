@@ -51,12 +51,23 @@ type (
 	}
 )
 
+// terminate server execution and log fatal error
 func failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("%s: %s", msg, err)
 	}
 }
 
+// if there's an error return HTTPError
+func returnOnError(c echo.Context, err error, httpStatus int, msg string) *echo.HTTPError {
+	if err != nil {
+		c.Logger().Error(err)
+		return echo.NewHTTPError(httpStatus, msg)
+	}
+	return nil
+}
+
+// generate the request ID
 func getRequestID(c echo.Context) (string, error) {
 	rid := c.Request().Header.Get(echo.HeaderXRequestID)
 	if rid == "" {
@@ -65,12 +76,14 @@ func getRequestID(c echo.Context) (string, error) {
 	return rid, nil
 }
 
+// return Tenant from database using the id
 func (h *Handler) getTenantByID(id int) (Tenant, error) {
 	t := &Tenant{}
 	err := h.db.QueryRow("SELECT id, name, md5 FROM tenant where id = ?", id).Scan(&t.ID, &t.Name, &t.Md5)
 	return *t, err
 }
 
+// return Tenant from database using the name
 func (h *Handler) getTenantByName(name string) (Tenant, error) {
 	t := &Tenant{}
 	err := h.db.QueryRow("SELECT id, name, md5 FROM tenant where name = ?", name).Scan(&t.ID, &t.Name, &t.Md5)
@@ -83,10 +96,7 @@ func (h *Handler) getTenant(c echo.Context) error {
 	id, _ := strconv.Atoi(c.Param("id"))
 
 	t, err := h.getTenantByID(id)
-	if err != nil {
-		c.Logger().Error(err)
-		return echo.NewHTTPError(http.StatusNotFound, "unable to get tenant details")
-	}
+	returnOnError(c, err, http.StatusNotFound, "Unable to get tenant details")
 
 	rid, _ := getRequestID(c)
 	fmt.Println(rid)
@@ -98,32 +108,21 @@ func (h *Handler) getTenant(c echo.Context) error {
 func (h *Handler) createTenant(c echo.Context) error {
 
 	t := &Tenant{}
-	if err := c.Bind(t); err != nil {
-		c.Logger().Error(err)
-		return echo.NewHTTPError(http.StatusNotFound, "unable to bind context to tenant")
-	}
+	err := c.Bind(t)
+	returnOnError(c, err, http.StatusNotFound, "Unable to bind context to tenant")
 
 	hash := md5.Sum([]byte(t.Name))
 	t.Md5 = hex.EncodeToString(hash[:])
 
 	stmt, err := h.db.Prepare("INSERT INTO tenant (name, md5) VALUES (?, ?)")
-	if err != nil {
-		c.Logger().Error(err)
-		return echo.NewHTTPError(http.StatusNotFound, "error preparing statement")
-	}
+	returnOnError(c, err, http.StatusInternalServerError, "Error preparing statement")
 
 	res, err := stmt.Exec(t.Name, t.Md5)
-	if err != nil {
-		c.Logger().Error(err)
-		return echo.NewHTTPError(http.StatusNotFound, "error executing statement")
-	}
+	returnOnError(c, err, http.StatusInternalServerError, "Error executing statement")
 
 	id, err := res.LastInsertId()
 	err = h.db.QueryRow("SELECT id, name FROM tenant where id = ?", id).Scan(&t.ID, &t.Name)
-	if err != nil {
-		c.Logger().Error(err)
-		return echo.NewHTTPError(http.StatusNotFound, "unable to query tenant")
-	}
+	returnOnError(c, err, http.StatusInternalServerError, "Unable to query tenant")
 
 	return c.JSON(http.StatusCreated, t)
 }
@@ -132,12 +131,8 @@ func (h *Handler) createTenant(c echo.Context) error {
 func (h *Handler) deleteTenant(c echo.Context) error {
 	id, _ := strconv.Atoi(c.Param("id"))
 
-	rows, err := h.db.Query("DELETE FROM tenant WHERE id = ?", id)
-	if err != nil {
-		c.Logger().Error(err)
-		return echo.NewHTTPError(http.StatusNotFound, "error deleting tenant")
-	}
-	defer rows.Close()
+	_, err := h.db.Query("DELETE FROM tenant WHERE id = ?", id)
+	returnOnError(c, err, http.StatusInternalServerError, "Error deleting tenant")
 
 	return c.NoContent(http.StatusNoContent)
 }
@@ -147,21 +142,17 @@ func (h *Handler) putTenant(c echo.Context) error {
 
 	// bint tenant using the request JSON
 	t := new(Tenant)
-	if err := c.Bind(t); err != nil {
-		return err
-	}
+	err := c.Bind(t)
+	returnOnError(c, err, http.StatusNotFound, "Unable to bind context to tenant")
 
 	// change tenant details
 	res, err := h.db.Exec("UPDATE tenant SET name = ? WHERE id = ?", t.Name, t.ID)
-	if err != nil {
-		c.Logger().Error(err)
-		return echo.NewHTTPError(http.StatusNotFound, "error updating tenant")
-	}
+	returnOnError(c, err, http.StatusInternalServerError, "error updating tenant")
 
 	// check if the tenant was changed
 	count, _ := res.RowsAffected()
 	if count == 0 {
-		return echo.NewHTTPError(http.StatusOK, "no change to tenant")
+		return echo.NewHTTPError(http.StatusOK, "No change to tenant")
 	}
 
 	// get tenant from db
@@ -176,10 +167,7 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 	name := c.Param("name")
 
 	t, err := h.getTenantByName(name)
-	if err != nil {
-		c.Logger().Error(err)
-		return echo.NewHTTPError(http.StatusNotFound, "unable to get tenant details")
-	}
+	returnOnError(c, err, http.StatusNotFound, "Unable to get tenant details")
 
 	//------------
 	// Read files
@@ -187,9 +175,7 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 
 	// Multipart form
 	form, err := c.MultipartForm()
-	if err != nil {
-		return err
-	}
+	returnOnError(c, err, http.StatusInternalServerError, "Error accessing multipart form")
 	files := form.File["files"]
 
 	// create tenant directory using it's first four md5 chars
@@ -201,9 +187,7 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 	for _, file := range files {
 		// Source
 		src, err := file.Open()
-		if err != nil {
-			return err
-		}
+		returnOnError(c, err, http.StatusInternalServerError, "Error opening file")
 		defer src.Close()
 
 		// Destination
@@ -211,15 +195,12 @@ func (h *Handler) uploadToTenant(c echo.Context) error {
 		// create files inside the
 		fileName := fmt.Sprintf("%s%c%s", tenantDirectory, os.PathSeparator, file.Filename)
 		dst, err := os.Create(fileName)
-		if err != nil {
-			return err
-		}
+		returnOnError(c, err, http.StatusNotFound, "Error creating file")
 		defer dst.Close()
 
 		// Copy
-		if _, err = io.Copy(dst, src); err != nil {
-			return err
-		}
+		_, err = io.Copy(dst, src)
+		returnOnError(c, err, http.StatusNotFound, "Error saving file")
 	}
 
 	return c.JSON(http.StatusOK, files)

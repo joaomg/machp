@@ -52,6 +52,19 @@ curl -X GET localhost:8080/tenant/1
 $env:MACHP_PORT=1326
 go run .\server.go
 
+### change driver, data source and lauch the server
+$env:MACHP_DB_DRIVER="mysql"
+$env:MACHP_DB_DATA_SOURCE="machp:machp123@tcp(localhost:3306)/machp_dev"
+go run .\server.go
+
+### environment variables
+MACHP_DB_DRIVER
+MACHP_DB_DATA_SOURCE
+MACHP_MQ_URL
+MACHP_HOST
+MACHP_PORT
+MACHP_HOME
+
 ### pull rabbitmq image
 docker pull rabbitmq
 
