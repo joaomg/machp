@@ -11,4 +11,5 @@ require (
 	github.com/streadway/amqp v0.0.0-20190827072141-edfb9018d271
 	github.com/stretchr/testify v1.4.0
 	golang.org/x/crypto v0.0.0-20191122220453-ac88ee75c92c // indirect
+	google.golang.org/appengine v1.6.5 // indirect
 )

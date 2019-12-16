@@ -21,19 +21,11 @@ import (
 // Config is a application configuration structure
 type Config struct {
 	Database struct {
-		Host        string `env:"MACHP_DB_HOST" env-description:"Database host" env-default:"localhost"`
-		Port        string `env:"MACHP_DB_PORT" env-description:"Database port" env-default:"3306"`
-		User        string `env:"MACHP_DB_USER" env-description:"Database user name" env-default:"machp"`
-		Password    string `env:"MACHP_DB_PASSWORD" env-description:"Database user password" env-default:"machp123"`
-		Name        string `env:"MACHP_DB_NAME" env-description:"Database name" env-default:"machp_dev"`
-		Connections int    `env:"MACHP_DB_CONNECTIONS" env-description:"Total number of database connections" env-default:"8"`
+		Driver     string `env:"MACHP_DB_DRIVER" env-description:"Database driver" env-default:"mysql"`
+		DataSource string `env:"MACHP_DB_DATA_SOURCE" env-description:"Database data source" env-default:"machp:machp123@tcp(localhost:3306)/machp_dev"`
 	} `yaml:"database"`
 	Queue struct {
-		Scheme   string `env:"MACHP_MQ_SCHENE" env-description:"Message queue scheme: amqp or amqps" env-default:"amqp"`
-		User     string `env:"MACHP_MQ_USER" env-description:"Message queue user name" env-default:"guest"`
-		Password string `env:"MACHP_MQ_PASSWORD" env-description:"Message queue password" env-default:"guest"`
-		Host     string `env:"MACHP_MQ_HOST" env-description:"Message queue host" env-default:"localhost"`
-		Port     string `env:"MACHP_MQ_PORT" env-description:"Message queue port" env-default:"5672"`
+		URL string `env:"MACHP_MQ_URL" env-description:"Message queue AMPQ uri string" env-default:"amqp://guest@localhost:5672/"`
 	} `yaml:"queue"`
 	Server struct {
 		Host string `env:"MACHP_HOST" env-description:"Server host" env-default:"localhost"`
@@ -248,12 +240,12 @@ func main() {
 	os.Mkdir(machpHome, 0755)
 
 	// database
-	db, err := sql.Open("mysql", cfg.Database.User+":"+cfg.Database.Password+"@tcp("+cfg.Database.Host+":"+cfg.Database.Port+")/"+cfg.Database.Name)
+	db, err := sql.Open(cfg.Database.Driver, cfg.Database.DataSource)
 	failOnError(err, "Failed to connect to myql database")
 	defer db.Close()
 
 	// message queue
-	conn, err := amqp.Dial(cfg.Queue.Scheme + "://" + cfg.Queue.User + "@" + cfg.Queue.Host + ":" + cfg.Queue.Port + "/")
+	conn, err := amqp.Dial(cfg.Queue.URL)
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 

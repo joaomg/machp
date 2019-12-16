@@ -4,7 +4,7 @@
 cd c:\celfinet\machp
 
 ### download, add and remove unused dependencies
-go tidy up
+go mod tidy
 
 ### create machp user
 mysql -hlocalhost -P3306 -uroot -ppandora -e"source 0_machp_user.sql;"
