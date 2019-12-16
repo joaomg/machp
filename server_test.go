@@ -112,7 +112,7 @@ func TestTenant(t *testing.T) {
 	}
 
 	// uploadToTenant
-	path := "abc.txt"
+	path := "test/abc.txt"
 	file, err := os.Open(path)
 	assert.Nil(t, err)
 	defer file.Close()

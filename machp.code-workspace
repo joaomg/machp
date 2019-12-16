@@ -1,7 +1,10 @@
 {
 	"folders": [
-		{
-			"path": "."
-		}
-	]
+        {
+            "path": "."
+        },
+        {
+            "path": "C:\\celfinet\\machp_worker"
+        }
+    ]
 }
